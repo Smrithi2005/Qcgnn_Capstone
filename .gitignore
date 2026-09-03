@@ -222,7 +222,6 @@ __marimo__/
 # Project-specific 
 data/ 
 models/ 
-results/ 
 logs/ 
 *.pt 
 *.pth 

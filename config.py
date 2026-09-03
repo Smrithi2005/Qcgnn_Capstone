@@ -28,10 +28,17 @@ import os
 from pathlib import Path
 
 # ==============================================================================
+# Logging
+# ==============================================================================
+
+LOG_LEVEL = logging.INFO
+LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+# ==============================================================================
 # Project Root (always resolves correctly from any run location)
 # ==============================================================================
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = Path(__file__).resolve().parent 
 DATA_ROOT = PROJECT_ROOT / "data" / "qm9"
 
 # ==============================================================================
@@ -187,7 +194,7 @@ NUM_WORKERS = 0
 
 CAUSAL_MIN_ATOMS = 3
 CAUSAL_MAX_ATOMS = 12           # Use full range (more atoms = more accurate)
-CAUSAL_AUTO_FRACTION = 0.3      # Auto-select ~30% of atoms
+CAUSAL_AUTO_FRACTION = 0.2      # Auto-select ~20% of atoms
 CAUSAL_FILTER_MODE = 'gradient' # Gradient-based importance
 
 # ==============================================================================
@@ -229,98 +236,5 @@ np.random.seed(RANDOM_SEED)
 
 if torch.cuda.is_available():
     torch.cuda.manual_seed_all(RANDOM_SEED)
-    torch.backends.cudnn.deterministic = False
-    torch.backends.cudnn.benchmark = True
-
-# ============================================================================
-# LAYER 3: Causal SCM Output Paths
-# ============================================================================
-
-LAYER3_OUTPUT_DIR = DATA_DIR / "qm9" / "layer3"
-LAYER3_OUTPUT_PKL = LAYER3_OUTPUT_DIR / "qm9_layer3.pkl"
-LAYER3_OUTPUT_CAUSAL_STATS = LAYER3_OUTPUT_DIR / "qm9_layer3_causal_stats.csv"
-
-
-# ============================================================================
-# LAYER 4-5: Quantum Circuit + Training Paths
-# ============================================================================
-
-LAYER4_OUTPUT_DIR = DATA_DIR / "qm9" / "layer4"
-LAYER4_CHECKPOINT_DIR = LAYER4_OUTPUT_DIR / "checkpoints"
-LAYER4_BEST_MODEL = LAYER4_CHECKPOINT_DIR / "best_model.pt"
-LAYER4_TRAINING_LOG = LAYER4_OUTPUT_DIR / "training_log.csv"
-LAYER4_PREDICTIONS = LAYER4_OUTPUT_DIR / "predictions.pkl"
-
-
-# ============================================================================
-# GPU CONFIGURATION FOR RTX A2000 (4GB VRAM)
-# ============================================================================
-
-import torch
-
-DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
-
-if torch.cuda.is_available():
-    torch.cuda.set_device(0)
-    torch.cuda.empty_cache()
-
-BATCH_SIZE = 8
-LAYER3_BATCH_SIZE = 4
-LAYER4_BATCH_SIZE = 8
-TORCH_EMPTY_CACHE_EVERY = 10
-USE_AUTOMATIC_MIXED_PRECISION = False
-LAYER3_GRADIENT_CHECKPOINT = True
-PIN_MEMORY = True
-NUM_WORKERS = 0
-
-# ============================================================================
-# Causal SCM Hyperparameters (Layer 3)
-# ============================================================================
-
-CAUSAL_MIN_ATOMS = 3
-CAUSAL_MAX_ATOMS = 8
-CAUSAL_AUTO_FRACTION = 0.3
-CAUSAL_FILTER_MODE = 'gradient'
-
-# ============================================================================
-# Quantum Circuit Hyperparameters (Layer 4)
-# ============================================================================
-
-N_QUBITS_BASE = 8
-N_ROTATION_LAYERS = 2
-N_ENTANGLE_LAYERS = 1
-ENTANGLE_MODE = 'linear'
-
-# ============================================================================
-# Training Hyperparameters (Layers 4-5 Joint)
-# ============================================================================
-
-LEARNING_RATE = 1e-3
-LR_DECAY_FACTOR = 0.95
-LR_DECAY_STEPS = 10
-N_EPOCHS = 50
-EARLY_STOPPING_PATIENCE = 10
-GRADIENT_CLIP_MAX_NORM = 1.0
-WEIGHT_DECAY = 0.0
-LAMBDA_CAUSAL = 0.1
-
-# ============================================================================
-# Causal Extractor Configuration
-# ============================================================================
-
-GCN_HIDDEN_DIM = 32
-USE_PRETRAINED_GCN = False
-IMPORTANCE_SMOOTHING = 1e-6
-
-# ============================================================================
-# RANDOM SEEDS
-# ============================================================================
-
-torch.manual_seed(42)
-import numpy as np
-np.random.seed(42)
-
-if torch.cuda.is_available():
-    torch.cuda.manual_seed_all(42)
     torch.backends.cudnn.deterministic = False
     torch.backends.cudnn.benchmark = True

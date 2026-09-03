@@ -17,7 +17,7 @@ from rdkit import Chem
 from rdkit.Chem import AllChem, GetPeriodicTable
 
 #
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+# sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 from config import (
     LAYER1_INPUT, LAYER1_OUTPUT_PKL, LAYER1_OUTPUT_CSV, LAYER1_OUTPUT_STATS,
@@ -30,8 +30,8 @@ logging.basicConfig(
     level=LOG_LEVEL,
     format=LOG_FORMAT,
     handlers=[
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler("layer1_output.txt"),
+      logging.StreamHandler(sys.stdout),
+      logging.FileHandler("layer1_output.txt", encoding="utf-8"),
     ]
 )
 logger = logging.getLogger(__name__)
@@ -221,6 +221,11 @@ if len(xyz_files) == 0:
     logger.error("No XYZ files found. Please check LAYER1_INPUT in config.py")
     sys.exit(1)
 
+if LAYER1_OUTPUT_PKL.exists():
+    logger.info(f"✓ Output already exists: {LAYER1_OUTPUT_PKL}")
+    logger.info("Skipping preprocessing. Delete the file if you want to reprocess.")
+    sys.exit(0)
+
 
 
 
@@ -334,4 +339,3 @@ logger.info(f"  Statistics   : {LAYER1_OUTPUT_STATS}")
 logger.info("\n[NEXT STEP]")
 logger.info("  Run Layer 2:  python code/layer2_qcgnn/qcgnn_preprocessing.py")
 logger.info("\n" + "=" * 80)
-
