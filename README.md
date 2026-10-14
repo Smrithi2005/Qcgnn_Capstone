@@ -174,15 +174,87 @@ The project forms a 2x2 experimental matrix isolating the effects of Graph Repre
 
 ---
 
-## 18. RESULTS TABLE
-*Metrics extracted from actual `results/*_test_metrics.json`. Errors are Mean Absolute Error (MAE) evaluated on the independent test set in physical units (eV).*
+## 18. RESULTS — COMPLETE COMPARISON MATRIX
+*All metrics extracted from actual `results/*_test_metrics.json`, evaluated on the independent test set. MAE and RMSE are in physical units (eV). R² is dimensionless (higher is better).*
 
-| Experiment | Graph | Model | HOMO MAE (eV) | LUMO MAE (eV) | GAP MAE (eV) |
-|------------|-------|-------|---------------|---------------|--------------|
-| Exp A | Full | Classical GENConv | 0.2122 | 0.3068 | 0.3501 |
-| Exp B | Causal | Classical GENConv | 0.3675 | 0.7018 | 0.7191 |
-| Exp D | Full | Hybrid QCGNN | 0.3836 | 0.7471 | 0.7847 |
-| Exp C | Causal | Hybrid QCGNN | 0.4078 | 0.7709 | 0.8143 |
+### 18.1 Full Results Table
+
+| Experiment | Graph | Model | HOMO MAE (eV) | HOMO RMSE (eV) | HOMO R² | LUMO MAE (eV) | LUMO RMSE (eV) | LUMO R² | GAP MAE (eV) | GAP RMSE (eV) | GAP R² |
+|------------|-------|-------|---------------|----------------|---------|---------------|----------------|---------|-------------|----------------|--------|
+| Exp A | Full | Classical GENConv | 0.2122 | 0.2969 | 0.7593 | 0.3068 | 0.4467 | 0.8818 | 0.3501 | 0.4978 | 0.8563 |
+| Exp B | Causal | Classical GENConv | 0.3675 | 0.4953 | 0.3303 | 0.7018 | 0.8848 | 0.5363 | 0.7191 | 0.9145 | 0.5152 |
+| Exp C | Causal | Hybrid QCGNN | 0.4078 | 0.5446 | 0.1902 | 0.7709 | 0.9504 | 0.4649 | 0.8143 | 1.0119 | 0.4064 |
+| Exp D | Full | Hybrid QCGNN | 0.3836 | 0.5216 | 0.2572 | 0.7471 | 0.9299 | 0.4878 | 0.7847 | 0.9778 | 0.4458 |
+
+### 18.2 HOMO — 2×2 Comparison Matrix
+
+**MAE (eV) ↓ Lower is better**
+
+|                    | Classical GENConv | Hybrid QCGNN |
+|--------------------|-------------------|--------------|
+| **Full Graph**     | **0.2122** (Exp A) | 0.3836 (Exp D) |
+| **Causal Graph**   | 0.3675 (Exp B)     | 0.4078 (Exp C) |
+
+**RMSE (eV) ↓ Lower is better**
+
+|                    | Classical GENConv | Hybrid QCGNN |
+|--------------------|-------------------|--------------|
+| **Full Graph**     | **0.2969** (Exp A) | 0.5216 (Exp D) |
+| **Causal Graph**   | 0.4953 (Exp B)     | 0.5446 (Exp C) |
+
+**R² ↑ Higher is better**
+
+|                    | Classical GENConv | Hybrid QCGNN |
+|--------------------|-------------------|--------------|
+| **Full Graph**     | **0.7593** (Exp A) | 0.2572 (Exp D) |
+| **Causal Graph**   | 0.3303 (Exp B)     | 0.1902 (Exp C) |
+
+### 18.3 LUMO — 2×2 Comparison Matrix
+
+**MAE (eV) ↓ Lower is better**
+
+|                    | Classical GENConv | Hybrid QCGNN |
+|--------------------|-------------------|--------------|
+| **Full Graph**     | **0.3068** (Exp A) | 0.7471 (Exp D) |
+| **Causal Graph**   | 0.7018 (Exp B)     | 0.7709 (Exp C) |
+
+**RMSE (eV) ↓ Lower is better**
+
+|                    | Classical GENConv | Hybrid QCGNN |
+|--------------------|-------------------|--------------|
+| **Full Graph**     | **0.4467** (Exp A) | 0.9299 (Exp D) |
+| **Causal Graph**   | 0.8848 (Exp B)     | 0.9504 (Exp C) |
+
+**R² ↑ Higher is better**
+
+|                    | Classical GENConv | Hybrid QCGNN |
+|--------------------|-------------------|--------------|
+| **Full Graph**     | **0.8818** (Exp A) | 0.4878 (Exp D) |
+| **Causal Graph**   | 0.5363 (Exp B)     | 0.4649 (Exp C) |
+
+### 18.4 GAP — 2×2 Comparison Matrix
+
+**MAE (eV) ↓ Lower is better**
+
+|                    | Classical GENConv | Hybrid QCGNN |
+|--------------------|-------------------|--------------|
+| **Full Graph**     | **0.3501** (Exp A) | 0.7847 (Exp D) |
+| **Causal Graph**   | 0.7191 (Exp B)     | 0.8143 (Exp C) |
+
+**RMSE (eV) ↓ Lower is better**
+
+|                    | Classical GENConv | Hybrid QCGNN |
+|--------------------|-------------------|--------------|
+| **Full Graph**     | **0.4978** (Exp A) | 0.9778 (Exp D) |
+| **Causal Graph**   | 0.9145 (Exp B)     | 1.0119 (Exp C) |
+
+**R² ↑ Higher is better**
+
+|                    | Classical GENConv | Hybrid QCGNN |
+|--------------------|-------------------|--------------|
+| **Full Graph**     | **0.8563** (Exp A) | 0.4458 (Exp D) |
+| **Causal Graph**   | 0.5152 (Exp B)     | 0.4064 (Exp C) |
+
 
 ---
 
