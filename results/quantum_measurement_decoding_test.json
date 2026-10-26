@@ -1,0 +1,182 @@
+{
+  "qiskit_version": "2.6.1",
+  "n_qubits": 8,
+  "bit_order": "logical qubit 0 is the rightmost bit",
+  "tolerance": 1e-12,
+  "valid_cases": [
+    {
+      "name": "all_zero",
+      "counts": {
+        "00000000": 128
+      },
+      "expected": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "actual": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "absolute_differences": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "max_absolute_difference": 0.0,
+      "passed": true
+    },
+    {
+      "name": "all_one",
+      "counts": {
+        "11111111": 128
+      },
+      "expected": [
+        -1.0,
+        -1.0,
+        -1.0,
+        -1.0,
+        -1.0,
+        -1.0,
+        -1.0,
+        -1.0
+      ],
+      "actual": [
+        -1.0,
+        -1.0,
+        -1.0,
+        -1.0,
+        -1.0,
+        -1.0,
+        -1.0,
+        -1.0
+      ],
+      "absolute_differences": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "max_absolute_difference": 0.0,
+      "passed": true
+    },
+    {
+      "name": "balanced",
+      "counts": {
+        "00000000": 64,
+        "11111111": 64
+      },
+      "expected": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "actual": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "absolute_differences": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "max_absolute_difference": 0.0,
+      "passed": true
+    },
+    {
+      "name": "mixed_bitstrings",
+      "counts": {
+        "00000001": 4,
+        "00000010": 2,
+        "10000000": 1
+      },
+      "expected": [
+        -0.14285714285714285,
+        0.42857142857142855,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        0.7142857142857143
+      ],
+      "actual": [
+        -0.14285714285714285,
+        0.42857142857142855,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        0.7142857142857143
+      ],
+      "absolute_differences": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "max_absolute_difference": 0.0,
+      "passed": true
+    }
+  ],
+  "invalid_cases": [
+    {
+      "name": "empty_counts",
+      "counts": {},
+      "expected_error": "Measurement counts cannot be empty.",
+      "actual_error": "Measurement counts cannot be empty.",
+      "passed": true
+    },
+    {
+      "name": "zero_total_shots",
+      "counts": {
+        "00000000": 0
+      },
+      "expected_error": "Total measurement shots must be greater than zero.",
+      "actual_error": "Total measurement shots must be greater than zero.",
+      "passed": true
+    }
+  ],
+  "all_passed": true
+}

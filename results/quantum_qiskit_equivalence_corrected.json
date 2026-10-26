@@ -1,0 +1,78 @@
+{
+  "baseline": "C:\\Users\\Dell\\Desktop\\qcgnn_project\\results\\quantum_simulator_baseline_corrected.json",
+  "checkpoint": "C:\\Users\\Dell\\Desktop\\qcgnn_project\\models\\best_qcgnn_corrected.pt",
+  "simulator": "Qiskit Statevector.from_instruction",
+  "qiskit_version": "2.6.1",
+  "n_qubits": 8,
+  "gate_sequence": [
+    "RY(input_angles[qubit]) for qubit 0..7",
+    "RY(quantum_weights[0, qubit]) for qubit 0..7",
+    "CX(qubit, qubit + 1) for qubit 0..6",
+    "RY(quantum_weights[1, qubit]) for qubit 0..7",
+    "Pauli-Z expectation for qubit 0..7"
+  ],
+  "measurement_order": "logical qubit 0 through 7",
+  "pauli_labels": [
+    "IIIIIIIZ",
+    "IIIIIIZI",
+    "IIIIIZII",
+    "IIIIZIII",
+    "IIIZIIII",
+    "IIZIIIII",
+    "IZIIIIII",
+    "ZIIIIIII"
+  ],
+  "tolerance": 1e-06,
+  "pennylane_measurements": [
+    -0.21838462352752686,
+    0.035099830478429794,
+    -0.06220864877104759,
+    -0.4610195457935333,
+    0.698616087436676,
+    -0.4825865924358368,
+    0.2734629809856415,
+    -0.4242173731327057
+  ],
+  "qiskit_measurements": [
+    -0.21838443429100948,
+    0.0350998412673565,
+    -0.06220856972604826,
+    -0.46101929876432207,
+    0.6986157148095388,
+    -0.4825863567799006,
+    0.2734628830047995,
+    -0.4242171836274851
+  ],
+  "absolute_differences": [
+    1.892365173727928e-07,
+    1.0788926703420021e-08,
+    7.904499933070186e-08,
+    2.4702921125330235e-07,
+    3.7262713725727536e-07,
+    2.3565593620933356e-07,
+    9.798084199541535e-08,
+    1.895052205713732e-07
+  ],
+  "max_absolute_difference": 3.7262713725727536e-07,
+  "equivalence_passed": true,
+  "baseline_standardized_predictions": [
+    -0.24715465307235718,
+    -0.3136245608329773,
+    -0.1875327080488205
+  ],
+  "qiskit_standardized_predictions": [
+    -0.24715441113146852,
+    -0.31362450531149555,
+    -0.18753278749159905
+  ],
+  "standardized_prediction_absolute_differences": [
+    2.419408886566998e-07,
+    5.552148174547966e-08,
+    7.944277854998738e-08
+  ],
+  "target_order": [
+    "HOMO",
+    "LUMO",
+    "GAP"
+  ]
+}

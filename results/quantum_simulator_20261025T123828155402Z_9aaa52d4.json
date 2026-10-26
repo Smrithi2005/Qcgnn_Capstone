@@ -1,0 +1,174 @@
+{
+  "status": "success",
+  "execution": {
+    "state": "Completed"
+  },
+  "execution_id": "f38ad1e2137049609f32772799a6d4c2",
+  "mode": "LOCAL SIMULATOR",
+  "molecule": {
+    "input_smiles": "CC(=O)C",
+    "atom_count": 10,
+    "model_atom_count": 10,
+    "canonical_smiles": "CC(C)=O",
+    "formula": "C3H6O",
+    "exact_mass": 58.041864812,
+    "heavy_atoms": 4,
+    "rings": 0
+  },
+  "structure": {
+    "nodes": [
+      {
+        "id": 0,
+        "atomic_num": 6,
+        "symbol": "C",
+        "label": "C",
+        "formal_charge": 0,
+        "isotope": 0,
+        "is_aromatic": false,
+        "chiral_tag": "CHI_UNSPECIFIED",
+        "explicit_hydrogens": 0,
+        "implicit_hydrogens": 0,
+        "x": 1.299038105676658,
+        "y": 0.14999999999999958,
+        "attribution": 1.644454836845398
+      },
+      {
+        "id": 1,
+        "atomic_num": 6,
+        "symbol": "C",
+        "label": "C",
+        "formal_charge": 0,
+        "isotope": 0,
+        "is_aromatic": false,
+        "chiral_tag": "CHI_UNSPECIFIED",
+        "explicit_hydrogens": 0,
+        "implicit_hydrogens": 0,
+        "x": -1.1102230246251565e-16,
+        "y": -0.6000000000000002,
+        "attribution": 0.8906489610671997
+      },
+      {
+        "id": 2,
+        "atomic_num": 8,
+        "symbol": "O",
+        "label": "O",
+        "formal_charge": 0,
+        "isotope": 0,
+        "is_aromatic": false,
+        "chiral_tag": "CHI_UNSPECIFIED",
+        "explicit_hydrogens": 0,
+        "implicit_hydrogens": 0,
+        "x": -3.3306690738754696e-16,
+        "y": -2.1,
+        "attribution": 1.769257664680481
+      },
+      {
+        "id": 3,
+        "atomic_num": 6,
+        "symbol": "C",
+        "label": "C",
+        "formal_charge": 0,
+        "isotope": 0,
+        "is_aromatic": false,
+        "chiral_tag": "CHI_UNSPECIFIED",
+        "explicit_hydrogens": 0,
+        "implicit_hydrogens": 0,
+        "x": -1.2990381056766576,
+        "y": 0.15000000000000024,
+        "attribution": 1.644454836845398
+      }
+    ],
+    "bonds": [
+      {
+        "source": 0,
+        "target": 1,
+        "bond_type": 1.0,
+        "is_aromatic": false
+      },
+      {
+        "source": 1,
+        "target": 2,
+        "bond_type": 2.0,
+        "is_aromatic": false
+      },
+      {
+        "source": 1,
+        "target": 3,
+        "bond_type": 1.0,
+        "is_aromatic": false
+      }
+    ],
+    "causal_nodes": [
+      0,
+      2,
+      3
+    ],
+    "causal_bonds": [],
+    "attribution_available": true
+  },
+  "causal_analysis": {
+    "method": "prediction-gradient saliency",
+    "available": true,
+    "kept_nodes": [
+      2,
+      3,
+      0
+    ],
+    "selected_atom_indices": [
+      0,
+      2,
+      3
+    ],
+    "model_selected_atom_indices": [
+      2,
+      3,
+      0
+    ],
+    "attribution_scores": [
+      1.644454836845398,
+      0.8906489610671997,
+      1.769257664680481,
+      1.644454836845398,
+      0.8314415216445923,
+      0.8314415216445923,
+      0.8314415216445923,
+      0.8314415216445923,
+      0.8314415216445923,
+      0.8314415216445923
+    ],
+    "display_attribution_scores": [
+      1.644454836845398,
+      0.8906489610671997,
+      1.769257664680481,
+      1.644454836845398
+    ]
+  },
+  "quantum": {
+    "num_qubits": 8,
+    "input_angles": [
+      -0.6683722138404846,
+      2.043825626373291,
+      -3.650668144226074,
+      -1.6567714214324951,
+      4.001500606536865,
+      3.9268460273742676,
+      4.419965744018555,
+      -1.19462251663208
+    ],
+    "z_expectations": [
+      0.5514086484909058,
+      0.0207496490329504,
+      0.4886366128921509,
+      -0.4308241307735443,
+      0.43466585874557495,
+      0.0013523739762604237,
+      -0.2942727506160736,
+      0.8394550681114197
+    ]
+  },
+  "prediction": {
+    "homo": -6.477602958679199,
+    "lumo": 0.0510333888232708,
+    "gap": 6.5331597328186035
+  }
+}

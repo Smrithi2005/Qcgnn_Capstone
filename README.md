@@ -1,5 +1,19 @@
 # QCGNN: Quantum-Causal Graph Neural Network for Molecular Property Prediction
 
+## Research Assistant Configuration
+
+The dashboard can use an OpenAI-compatible chat-completions service for conversational research answers. Set the API key in the process environment; never put the key in source code or commit it:
+
+```powershell
+$env:OPENAI_API_KEY = "your-rotated-key"
+$env:QCGNN_LLM_MODEL = "gpt-4o-mini"
+# Optional for an OpenAI-compatible provider:
+$env:QCGNN_LLM_ENDPOINT = "https://api.openai.com/v1/chat/completions"
+venv\Scripts\python.exe qcg_nn_app.py
+```
+
+If `OPENAI_API_KEY` is absent, or the provider/model request fails, the server logs the underlying failure and the assistant labels its local RDKit/QCGNN response as limited rather than presenting it as a full research answer.
+
 ## 1. PROJECT OVERVIEW
 **QCGNN** is a hybrid machine-learning pipeline designed to predict quantum-chemical molecular properties using a combination of classical Graph Neural Networks (GNNs), gradient-based causal subgraph extraction, and hybrid quantum-classical computing. 
 

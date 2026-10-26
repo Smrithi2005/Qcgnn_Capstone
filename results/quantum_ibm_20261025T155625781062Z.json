@@ -1,0 +1,36 @@
+{
+  "mode": "REAL IBM QPU",
+  "backend": "ibm_fez",
+  "job_id": "dbf2cu7sstms73fd0ieg",
+  "job_status": "DONE",
+  "shots": 1024,
+  "status": "completed",
+  "execution": {
+    "state": "Completed"
+  },
+  "measurements": [
+    0.26171875,
+    -0.14453125,
+    0.05859375,
+    -0.517578125,
+    0.109375,
+    -0.125,
+    -0.623046875,
+    0.90625
+  ],
+  "standardized_predictions": [
+    -0.9563916337518577,
+    -0.8124600205762325,
+    -0.3616790043085413
+  ],
+  "prediction": {
+    "homo": -7.101200824977332,
+    "lumo": -0.7420108628954051,
+    "gap": 6.35694907433154
+  },
+  "target_order": [
+    "HOMO",
+    "LUMO",
+    "GAP"
+  ]
+}

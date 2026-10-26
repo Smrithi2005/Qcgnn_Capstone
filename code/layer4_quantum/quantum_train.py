@@ -76,6 +76,16 @@ def train():
     import argparse
     ap = argparse.ArgumentParser()
     ap.add_argument("--epochs", type=int, default=config.N_EPOCHS)
+    ap.add_argument(
+        "--output-checkpoint",
+        type=Path,
+        default=config.MODELS_DIR / "best_qcgnn_corrected.pt",
+    )
+    ap.add_argument(
+        "--history-output",
+        type=Path,
+        default=config.RESULTS_DIR / "quantum_training_history_corrected.json",
+    )
     args = ap.parse_args()
     
     device = config.DEVICE
@@ -110,7 +120,7 @@ def train():
     best_val_loss = float('inf')
     history = {"train_loss": [], "val_loss": [], "epochs": 0}
     
-    model_save_path = config.MODELS_DIR / "best_qcgnn.pt"
+    model_save_path = args.output_checkpoint
     
     for epoch in range(1, args.epochs + 1):
         model.train()
@@ -161,7 +171,7 @@ def train():
             print(f"  -> New best model! Saving to {model_save_path}")
             torch.save(model.state_dict(), model_save_path)
             
-    history_path = config.RESULTS_DIR / "quantum_training_history.json"
+    history_path = args.history_output
     with open(history_path, "w") as f:
         json.dump(history, f, indent=4)
     print(f"Training history saved to {history_path}")

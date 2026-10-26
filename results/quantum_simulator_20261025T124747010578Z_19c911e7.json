@@ -1,0 +1,129 @@
+{
+  "status": "success",
+  "execution": {
+    "state": "Completed"
+  },
+  "execution_id": "5852a00d7f144d22a35e4ec704139ec7",
+  "mode": "LOCAL SIMULATOR",
+  "molecule": {
+    "input_smiles": "C=O",
+    "atom_count": 4,
+    "model_atom_count": 4,
+    "canonical_smiles": "C=O",
+    "formula": "CH2O",
+    "exact_mass": 30.010564684,
+    "heavy_atoms": 2,
+    "rings": 0
+  },
+  "structure": {
+    "nodes": [
+      {
+        "id": 0,
+        "atomic_num": 6,
+        "symbol": "C",
+        "label": "C",
+        "formal_charge": 0,
+        "isotope": 0,
+        "is_aromatic": false,
+        "chiral_tag": "CHI_UNSPECIFIED",
+        "explicit_hydrogens": 0,
+        "implicit_hydrogens": 0,
+        "x": -5.551115123125783e-17,
+        "y": -5.551115123125783e-17,
+        "attribution": 1.9010429382324219
+      },
+      {
+        "id": 1,
+        "atomic_num": 8,
+        "symbol": "O",
+        "label": "O",
+        "formal_charge": 0,
+        "isotope": 0,
+        "is_aromatic": false,
+        "chiral_tag": "CHI_UNSPECIFIED",
+        "explicit_hydrogens": 0,
+        "implicit_hydrogens": 0,
+        "x": 1.299038105676658,
+        "y": 0.7499999999999998,
+        "attribution": 1.9578466415405273
+      }
+    ],
+    "bonds": [
+      {
+        "source": 0,
+        "target": 1,
+        "bond_type": 2.0,
+        "is_aromatic": false
+      }
+    ],
+    "causal_nodes": [
+      0,
+      1
+    ],
+    "causal_bonds": [
+      {
+        "source": 0,
+        "target": 1,
+        "bond_type": 2.0,
+        "is_aromatic": false
+      }
+    ],
+    "attribution_available": true
+  },
+  "causal_analysis": {
+    "method": "prediction-gradient saliency",
+    "available": true,
+    "kept_nodes": [
+      1,
+      0,
+      2
+    ],
+    "selected_atom_indices": [
+      0,
+      1
+    ],
+    "model_selected_atom_indices": [
+      1,
+      0,
+      2
+    ],
+    "attribution_scores": [
+      1.9010429382324219,
+      1.9578466415405273,
+      1.0909736156463623,
+      1.0909736156463623
+    ],
+    "display_attribution_scores": [
+      1.9010429382324219,
+      1.9578466415405273
+    ]
+  },
+  "quantum": {
+    "num_qubits": 8,
+    "input_angles": [
+      -0.5466646552085876,
+      1.0856736898422241,
+      -3.2662510871887207,
+      -1.2961236238479614,
+      3.6283607482910156,
+      3.456463575363159,
+      3.3732757568359375,
+      -1.296301007270813
+    ],
+    "z_expectations": [
+      0.6382231712341309,
+      0.25883394479751587,
+      -0.3847258687019348,
+      -0.20271438360214233,
+      0.028541941195726395,
+      -0.011231896467506886,
+      0.657141387462616,
+      0.8603514432907104
+    ]
+  },
+  "prediction": {
+    "homo": -6.559854984283447,
+    "lumo": -0.6459691524505615,
+    "gap": 5.912899017333984
+  }
+}

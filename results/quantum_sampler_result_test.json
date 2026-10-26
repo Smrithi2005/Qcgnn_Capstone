@@ -1,0 +1,68 @@
+{
+  "qiskit_version": "2.6.1",
+  "sampler": "qiskit.primitives.StatevectorSampler",
+  "n_qubits": 8,
+  "classical_register": "meas",
+  "shots_requested": 128,
+  "counts": {
+    "10000011": 128
+  },
+  "expected_counts": {
+    "10000011": 128
+  },
+  "shots_observed": 128,
+  "expected_expectations": [
+    -1.0,
+    -1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    -1.0
+  ],
+  "actual_expectations": [
+    -1.0,
+    -1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    -1.0
+  ],
+  "absolute_differences": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+  ],
+  "bit_order": "logical qubit 0 is the rightmost bit",
+  "checks": {
+    "named_register_present": true,
+    "counts_match_deterministic_circuit": true,
+    "shot_total_matches_request": true,
+    "output_shape_is_eight": true,
+    "output_is_finite": true,
+    "expectations_match": true
+  },
+  "malformed_result_checks": [
+    {
+      "name": "missing_register",
+      "expected_error": "Sampler result does not contain a measurable register named 'missing'.",
+      "actual_error": "Sampler result does not contain a measurable register named 'missing'.",
+      "passed": true
+    },
+    {
+      "name": "malformed_result",
+      "expected_error": "Sampler result does not contain a first publication.",
+      "actual_error": "Sampler result does not contain a first publication.",
+      "passed": true
+    }
+  ],
+  "all_passed": true
+}
