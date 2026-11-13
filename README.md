@@ -1,443 +1,629 @@
-# QCGNN: Quantum-Causal Graph Neural Network for Molecular Property Prediction
+# QCGNN: Hybrid Quantum–Classical Graph Pipeline for QM9 Orbital Energies
 
-## Research Assistant Configuration
+Attribution-guided molecular subgraph selection with classical GENConv baselines and a compact hybrid quantum–classical regressor for **HOMO**, **LUMO**, and **HOMO–LUMO gap** on QM9.
 
-The dashboard can use an OpenAI-compatible chat-completions service for conversational research answers. Set the API key in the process environment; never put the key in source code or commit it:
+> **Scientific disclaimer.** In this repository, “causal” in older filenames and UI labels means **gradient-based attribution**, not proven physical causality. Main training metrics come from **PennyLane local simulation**. A small number of **IBM Quantum** jobs exist as **inference pilots**, not a full test-set hardware evaluation. This project **does not claim quantum advantage**.
 
-```powershell
-$env:OPENAI_API_KEY = "your-rotated-key"
-$env:QCGNN_LLM_MODEL = "gpt-4o-mini"
-# Optional for an OpenAI-compatible provider:
-$env:QCGNN_LLM_ENDPOINT = "https://api.openai.com/v1/chat/completions"
-venv\Scripts\python.exe qcg_nn_app.py
+For a detailed readiness audit and publication plan, see [`docs/research_readiness_and_publication_roadmap.md`](docs/research_readiness_and_publication_roadmap.md).
+
+---
+
+## Table of contents
+
+1. [Abstract and motivation](#1-abstract-and-motivation)
+2. [Research problem and objectives](#2-research-problem-and-objectives)
+3. [Proposed architecture](#3-proposed-architecture)
+4. [System architecture diagram](#4-system-architecture-diagram)
+5. [Layer-wise pipeline](#5-layer-wise-pipeline)
+6. [Mathematical formulation](#6-mathematical-formulation)
+7. [Quantum circuit and workflow](#7-quantum-circuit-and-workflow)
+8. [QM9 dataset and targets](#8-qm9-dataset-and-targets)
+9. [Technology stack](#9-technology-stack)
+10. [Repository structure](#10-repository-structure)
+11. [Installation](#11-installation)
+12. [Dataset preparation](#12-dataset-preparation)
+13. [Training](#13-training)
+14. [Evaluation](#14-evaluation)
+15. [IBM Quantum hardware](#15-ibm-quantum-hardware)
+16. [Experimental results](#16-experimental-results)
+17. [Visualizations](#17-visualizations)
+18. [Demo application](#18-demo-application)
+19. [Limitations](#19-limitations)
+20. [Reproducibility](#20-reproducibility)
+21. [Future work](#21-future-work)
+22. [Contributions and novelty](#22-contributions-and-novelty)
+23. [Citation](#23-citation)
+24. [Acknowledgements](#24-acknowledgements)
+
+---
+
+## 1. Abstract and motivation
+
+Predicting electronic orbital energies from molecular graphs is a standard task on the **QM9** benchmark. Classical graph neural networks (GNNs) are already strong on full graphs. This project asks a narrower, practical question:
+
+> If we retain only an **attribution-selected induced subgraph** of each molecule, how do a classical GENConv model and a **compact hybrid quantum–classical head** compare in accuracy and sensitivity to that pruning?
+
+The implemented hybrid model pools atom features, maps them to **8 angle encodings**, runs a small PennyLane parameterized circuit, and reads out HOMO / LUMO / gap. Classical GENConv baselines use the same targets and splits for a **2×2 comparison**: full vs reduced graphs × classical vs hybrid.
+
+---
+
+## 2. Research problem and objectives
+
+| Objective | Status in this repo |
+|-----------|---------------------|
+| Build QM9 molecular graphs with fixed node/edge features | Implemented |
+| Train-only target normalization; evaluate in eV | Implemented |
+| Select subgraphs via Integrated Gradients (training path) | Implemented (`layer3_causal.py`) |
+| Compare full-graph vs reduced-graph GENConv | Implemented (Experiments A, B) |
+| Train/evaluate pooled hybrid quantum–classical model | Implemented (Experiments C, D) |
+| Local PennyLane simulation metrics | Executed (saved JSON under `results/`) |
+| IBM QPU inference for selected molecules | Implemented; **pilot jobs only** |
+| Multi-seed statistics / ablations / quantum advantage | **Not completed** |
+
+**Prediction targets**
+
+| Target | Meaning | Units in evaluation |
+|--------|---------|---------------------|
+| HOMO | Highest occupied molecular orbital energy | eV (after Hartree → eV) |
+| LUMO | Lowest unoccupied molecular orbital energy | eV |
+| GAP | \(\varepsilon_\mathrm{LUMO} - \varepsilon_\mathrm{HOMO}\) | eV |
+
+---
+
+## 3. Proposed architecture
+
+### Experiment matrix
+
+| | Classical GENConv | Hybrid QCGNN |
+|--|-------------------|--------------|
+| **Full molecular graph** | Experiment A | Experiment D |
+| **Attribution-selected subgraph** | Experiment B | Experiment C |
+
+### Hybrid model (Experiments C / D)
+
+Implemented in [`code/layer4_quantum/quantum_model.py`](code/layer4_quantum/quantum_model.py) and [`code/layer4_quantum/quantum_circuit.py`](code/layer4_quantum/quantum_circuit.py):
+
+1. **Pooling:** `global_mean_pool` ∥ `global_max_pool` on raw 9-d node features → 18-d vector  
+2. **Classical projection:** `Linear(18 → 8)` → angle inputs  
+3. **PQC:** 8 qubits, RY angle encoding, 2 RY variational layers, 1 linear CNOT entangling layer  
+4. **Measurement:** Pauli-Z expectations \(\langle Z_i\rangle\) (analytic in PennyLane training)  
+5. **Readout:** MLP `8 → 16 → 3`
+
+**Important implementation detail:** `HybridQuantumGNN.forward` accepts `edge_index` for API compatibility but **does not use edges or edge features**. Message passing occurs only in the classical GENConv baselines and in the Layer-3 attribution GCN.
+
+### Attribution (training)
+
+[`layer3_causal.py`](layer3_causal.py) trains a feature-only GCN, applies **Integrated Gradients** on node features, keeps top-\(k\) atoms (\(k \approx 0.2n\), clamped to 3–12), and builds an **induced subgraph**. Downstream trainers load the **HOMO-selected** subgraph files and still regress all three targets.
+
+---
+
+## 4. System architecture diagram
+
+```mermaid
+flowchart TD
+  xyz[QM9_XYZ_files] --> L1[Layer1_preprocess]
+  L1 --> L2[Layer2_PyG_graphs_and_split]
+  L2 --> Full[Full_graphs]
+  L2 --> AttrGCN[Layer3_FeatureGCN]
+  AttrGCN --> IG[Integrated_Gradients]
+  IG --> Sub[Attribution_selected_subgraphs]
+  Full --> ExpA[ExpA_GENConv]
+  Sub --> ExpB[ExpB_GENConv]
+  Sub --> ExpC[ExpC_Hybrid_PQC]
+  Full --> ExpD[ExpD_Hybrid_PQC]
+  ExpA --> Pred[HOMO_LUMO_GAP_eV]
+  ExpB --> Pred
+  ExpC --> Pred
+  ExpD --> Pred
+  ExpC --> Sim[PennyLane_simulator]
+  ExpC --> IBM[IBM_Sampler_inference_pilot]
 ```
 
-If `OPENAI_API_KEY` is absent, or the provider/model request fails, the server logs the underlying failure and the assistant labels its local RDKit/QCGNN response as limited rather than presenting it as a full research answer.
-
-## 1. PROJECT OVERVIEW
-**QCGNN** is a hybrid machine-learning pipeline designed to predict quantum-chemical molecular properties using a combination of classical Graph Neural Networks (GNNs), gradient-based causal subgraph extraction, and hybrid quantum-classical computing. 
-
-The project investigates whether stripping a molecular graph down to its most "causally relevant" structural components (a reduced subgraph) improves the ability of parameterized quantum circuits to model complex molecular orbital energies.
-
-**Overall Pipeline:**
-`QM9 Dataset` → `Layer 1 (Data Extraction)` → `Layer 2 (PyG Graph Construction)` → `Layer 3 (Causal Analysis)` → `Layer 4 (Hybrid Quantum-Classical QCGNN)` → `HOMO / LUMO / GAP Predictions`
-
-*Note: The term "causal" in this repository refers to gradient-based attribution on graphs, not proven physical causality. Results reflect local quantum simulations (PennyLane) and do not currently claim physical quantum advantage.*
+Classical pathway (A/B): node + edge features → GENConv stack → mean+max pool → MLP.  
+Hybrid pathway (C/D): node features only → pool → 8 angles → PQC → MLP.
 
 ---
 
-## 2. RESEARCH OBJECTIVE
-To systematically investigate the performance of classical vs. hybrid quantum-classical GNNs on full molecular graphs vs. reduced causal subgraphs. 
+## 5. Layer-wise pipeline
 
-Current prediction targets are:
-- **HOMO** (Highest Occupied Molecular Orbital Energy)
-- **LUMO** (Lowest Unoccupied Molecular Orbital Energy)
-- **GAP** (HOMO-LUMO Energy Difference)
+### Layer 1 — Molecular preprocessing
 
-*Future extensions (currently audited but not actively predicted) include Dipole Moment, Isotropic Polarizability, and Heat Capacity (Cv).*
+**Script:** [`layer1_preprocessing.py`](layer1_preprocessing.py)  
+**Config:** [`config.py`](config.py)
+
+- **Input:** `data/qm9/raw/*.xyz`
+- **Actions:** parse atoms and 3D coordinates; infer undirected bonds when  
+  \(d_{ij} < 1.1\,(r_i^\mathrm{vdW} + r_j^\mathrm{vdW})\); build 9-d node features and 4-d bond features
+- **Output:** `data/qm9/processed/qm9_layer1.pkl`
+
+**Node features (9):** atomic number, formal charge, hybridization code, degree, total H count, aromatic flag, 6-ring flag, 5-ring flag, valence.
+
+**Edge features (4):** bond type, aromatic, in-ring, conjugated.  
+Distances are used **only** for bond existence, not as edge feature values.
+
+### Layer 2 — Graph construction, QM9 targets, split, normalization
+
+**Script:** [`layer2_XYZextraction.py`](layer2_XYZextraction.py)
+
+- Loads Layer 1 pickles and XYZ property lines for **homo / lumo / gap** (Hartree in the XYZ files)
+- Optional subsample: `MAX_SAMPLES = 25000` (default in `config.py`)
+- Split: 80% / 10% / 10% with `RANDOM_SEED = 42`
+- **Train-only** z-score of targets; stats saved to `data/qm9/layer2/norm_stats.pkl`
+- **Outputs:** `qm9_train.pkl`, `qm9_val.pkl`, `qm9_test.pkl`
+
+Evaluation scripts invert z-scoring and multiply by Hartree→eV factor `27.211386245988`.
+
+### Layer 3 — Attribution-based subgraph selection
+
+**Primary script (used by experiments):** [`layer3_causal.py`](layer3_causal.py)
+
+- Trains `FeatureGCN` (3× GCNConv, mean pool) on the training split
+- Integrated Gradients (default 100 steps, train-feature mean baseline)
+- Induced subgraph with \(k = \mathrm{round}(0.2\,n)\) clamped to \([3, 12]\)
+- Writes e.g. `data/qm9/layer3/qm9_causal_homo_{train,val,test}.pkl`
+
+**Note:** [`code/layer3_qcgnn_model/qcgnn_causal_extractor.py`](code/layer3_qcgnn_model/qcgnn_causal_extractor.py) is an older/alternate extractor and is **not** the path used by Experiments B/C. Prefer `layer3_causal.py`.
+
+**Inference-time attribution** (demo / SMILES): [`code/inference/causal_attribution_inference.py`](code/inference/causal_attribution_inference.py) uses gradients of the **prediction** (no ground-truth labels), then induces a subgraph with the same size rule family.
+
+### Layer 4 — Hybrid quantum–classical learning
+
+**Model:** [`code/layer4_quantum/quantum_model.py`](code/layer4_quantum/quantum_model.py)  
+**Train / eval (Experiment C):**  
+[`quantum_train.py`](code/layer4_quantum/quantum_train.py), [`quantum_evaluate.py`](code/layer4_quantum/quantum_evaluate.py)  
+**Default checkpoint:** `models/best_qcgnn_corrected.pt`
+
+**Classical baselines**
+
+| Exp | Train | Evaluate | Checkpoint |
+|-----|-------|----------|------------|
+| A | [`classical_gnn_train.py`](code/baselines/classical_gnn/classical_gnn_train.py) | [`classical_gnn_evaluate.py`](code/baselines/classical_gnn/classical_gnn_evaluate.py) | `models/best_classical_gnn.pt` |
+| B | [`causal_classical_gnn_train.py`](code/baselines/causal_classical_gnn/causal_classical_gnn_train.py) | [`causal_classical_gnn_evaluate.py`](code/baselines/causal_classical_gnn/causal_classical_gnn_evaluate.py) | `models/best_causal_classical_gnn.pt` |
+| D | [`full_qcgnn_train.py`](code/experiments/experiment_D_full_qcgnn/full_qcgnn_train.py) | [`full_qcgnn_evaluate.py`](code/experiments/experiment_D_full_qcgnn/full_qcgnn_evaluate.py) | `models/best_full_qcgnn.pt` |
+
+**Training hyperparameters (A–D, from `config.py` + trainers):** Adam `lr=1e-3`, MSE on z-scored targets, batch size 32, 100 epochs by default, gradient clip 1.0. Early-stopping patience is defined in config for Layer 3; the A–D training loops in this tree run the full epoch budget (saved histories show 100 epochs).
 
 ---
 
-## 3. DATASET
-**Dataset:** QM9 (Subset of up to 133,885 stable organic molecules).
-- **Molecular Data:** Sourced from raw `.xyz` files containing 3D atomic coordinates.
-- **Molecular Graphs:** Nodes represent atoms; Edges represent chemical bonds inferred via 3D Van der Waals radii.
-- **Nodes:** Variable up to 18 atoms.
-- **Edges:** Bidirectional edge pairs.
-- **Node Features (9):** Atomic properties (e.g., atomic number, charge states).
-- **Edge Features (4):** Bond properties (e.g., interatomic distances).
-- **Targets (3):** HOMO, LUMO, GAP extracted directly from line 2 of the `.xyz` files.
-- **Splits:** Pre-defined 80/10/10 Train/Validation/Test split generated via random seed.
+## 6. Mathematical formulation
+
+### Targets and normalization
+
+Let \(y \in \mathbb{R}^3\) be HOMO, LUMO, gap in Hartree. With train-set mean \(\mu\) and std \(\sigma\):
+
+\[
+\tilde{y} = \frac{y - \mu}{\sigma}
+\]
+
+At evaluation:
+
+\[
+\hat{y}_{\mathrm{eV}} = \big(\hat{\tilde{y}}\odot\sigma + \mu\big)\times 27.211386245988
+\]
+
+### Attribution scores (training IG)
+
+For a trained feature model \(f\) and baseline \(x'\), Integrated Gradients approximate feature attributions along the path from \(x'\) to \(x\). Node scores aggregate absolute feature attributions; the top-\(k\) nodes define the induced subgraph \(G_c=(V_c,E_c)\).
+
+### Hybrid forward map
+
+For node matrix \(X\in\mathbb{R}^{n\times 9}\) and batch index \(b\):
+
+\[
+h = \big[\mathrm{MeanPool}(X,b)\,\|\,\mathrm{MaxPool}(X,b)\big]\in\mathbb{R}^{18}
+\]
+
+\[
+z = W_p h + b_p \in\mathbb{R}^{8}
+\]
+
+Encode and evolve on 8 qubits, measure \(m_i=\langle Z_i\rangle\), then
+
+\[
+\hat{\tilde{y}} = \mathrm{MLP}(m)
+\]
+
+Edges are **not** used in this hybrid map.
 
 ---
 
-## 4. PROJECT ARCHITECTURE
+## 7. Quantum circuit and workflow
+
+Configured by `N_QUBITS_BASE=8`, `N_ROTATION_LAYERS=2`, `N_ENTANGLE_LAYERS=1`, `ENTANGLE_MODE='linear'` in [`config.py`](config.py).
+
+**Training / local eval (PennyLane)**
+
+1. Device: `default.qubit`, `diff_method="backprop"`
+2. Encode: \(R_Y(z_i)\) on wire \(i\)
+3. For each rotation layer: trainable \(R_Y(w_{\ell,i})\); after the first layer, linear CNOTs \(i\to i+1\)
+4. Return \([\langle Z_0\rangle,\ldots,\langle Z_7\rangle]\) (exact expectations; no shots)
+
+**IBM hardware path (inference only)**
+
+1. Rebuild the same RY / CNOT structure in Qiskit with frozen angles and weights  
+2. Transpile for a real backend; run Sampler with user-specified shots  
+3. Decode bitstring counts to \(\langle Z_i\rangle\); apply the classical readout and Hartree→eV inverse in NumPy  
+
+No quantum-parameter training occurs on the QPU.
+
+---
+
+## 8. QM9 dataset and targets
+
+| Item | Value in this project |
+|------|------------------------|
+| Source format | Local QM9-style `.xyz` under `data/qm9/raw/` |
+| Configured subset | `MAX_SAMPLES = 25000` (not the full ~133k unless you set `None`) |
+| Split | 80 / 10 / 10, seed 42 |
+| If nothing dropped | 20 000 / 2 500 / 2 500 (integer split) |
+| Targets | HOMO, LUMO, GAP |
+| Storage units | Hartree in XYZ / normalization |
+| Report units | eV after inverse transform |
+
+Place raw XYZ files before running Layers 1–2. This workspace may not include `data/` or `models/`; regenerate or restore them to train or evaluate.
+
+Primary dataset reference: Ramakrishnan et al., *Scientific Data* (2014), QM9 / figshare collection [10.6084/m9.figshare.c.978904.v5](https://doi.org/10.6084/m9.figshare.c.978904.v5).
+
+---
+
+## 9. Technology stack
+
+| Component | Role |
+|-----------|------|
+| Python 3.10+ (project venvs use 3.10.10) | Runtime |
+| PyTorch | Classical training |
+| PyTorch Geometric | Graphs, GENConv, pooling |
+| PennyLane | Differentiable PQC simulation |
+| RDKit | SMILES → graph for demo inference |
+| Flask | Local demo app |
+| scikit-learn | MAE / RMSE / R² helpers |
+| Qiskit + IBM Runtime | Optional hardware inference (`qpu_execution_venv`) |
+| NumPy / Pandas / Matplotlib | Data and plots |
+
+A frozen dump of one historical environment is in [`requirements_before_ibm.txt`](requirements_before_ibm.txt) (e.g. `torch==2.7.1+cu118`, `torch-geometric==2.7.0`, `PennyLane==0.39.0`, `rdkit==2026.3.6`, `Flask==3.1.3`). That file is large and includes extras; it is **not** a minimal install recipe. Prefer a clean venv (below) and pin versions that match your CUDA setup.
+
+---
+
+## 10. Repository structure
 
 ```text
-                    QM9 DATA (.xyz)
-                        |
-                        v
-              +------------------+
-              | Layer 1          |
-              | Data Extraction  |
-              +--------+---------+
-                       |
-                       v
-              +------------------+
-              | Layer 2          |
-              | Graph Construction|
-              +--------+---------+
-                       |
-                   Full Graph
-                       |
-                       v
-              +------------------+
-              | Layer 3          |
-              | Causal Analysis  |
-              +--------+---------+
-                       |
-                 Causal Graph
-                       |
-                       v
-              +------------------+
-              | Layer 4          |
-              | QCGNN            |
-              +--------+---------+
-                       |
-                       v
-             HOMO / LUMO / GAP
+Qcgnn_Capstone/
+├── config.py
+├── layer1_preprocessing.py
+├── layer2_XYZextraction.py
+├── layer3_causal.py
+├── qcg_nn_app.py
+├── qm9_visualize.py
+├── generate_pdf.py
+├── requirements_before_ibm.txt
+├── docs/
+│   └── research_readiness_and_publication_roadmap.md
+├── code/
+│   ├── baselines/
+│   │   ├── classical_gnn/
+│   │   └── causal_classical_gnn/
+│   ├── experiments/experiment_D_full_qcgnn/
+│   ├── inference/
+│   ├── layer3_qcgnn_model/          # alternate extractor (not Exp B/C path)
+│   ├── layer4_quantum/              # hybrid model, train/eval, IBM adapters
+│   └── visualization/visualize_results.py
+├── tests/
+├── reports/                         # simulator / Qiskit / IBM integration notes
+├── results/                         # metrics JSON, IBM/simulator logs, plots
+├── data/qm9/                        # raw / processed / layer2 / layer3 (local)
+└── models/                          # *.pt checkpoints (local)
 ```
 
----
-
-## 5. LAYER 1
-**File:** `qcgnn_preprocessing.py` (Functions integrating with `qm9_preprocess_dataset.py`)
-- **Input Format:** Raw `.xyz` coordinate files in `data/qm9/raw/`.
-- **Information Extracted:** Atomic symbols, 3D positions, and scalar target properties.
-- **Output:** Intermediate dictionaries passed directly in memory to Layer 2 converters. 
+Directories `data/` and `models/` are required to run training/evaluation but may be absent from a fresh clone.
 
 ---
 
-## 6. LAYER 2
-**File:** `qcgnn_preprocessing.py`
-- **Graph Construction:** Builds PyTorch Geometric (PyG) `Data` objects. Edges are inferred by calculating pairwise 3D Euclidean distances and filtering them against atomic Van der Waals (vdW) radii scaled by a `BOND_THRESHOLD_FACTOR` (1.1).
-- **Target Normalization:** Applies Z-score normalization `(y - mean) / std` calculated strictly on the training split to prevent data leakage. Normalization constants are saved in `data/qm9/layer2/norm_stats.pkl`.
-- **Output:** `qm9_train.pkl`, `qm9_val.pkl`, `qm9_test.pkl` in `data/qm9/layer2/`.
+## 11. Installation
 
----
+From the repository root (PowerShell):
 
-## 7. LAYER 3 — CAUSAL ANALYSIS
-**File:** `code/layer3_qcgnn_model/qcgnn_causal_extractor.py`
-- **Methodology:** Gradient-based causal attribution.
-- **Architecture:** A classical GCN forward pass predicts the target from node features. A backward pass calculates the gradient magnitude of the loss with respect to the input node features (`d(loss)/d(node_features)`).
-- **Subgraph Construction:** Nodes with the highest gradient magnitude are marked as structurally "important". The graph is pruned to keep only the top `CAUSAL_MIN_ATOMS` (3) to `CAUSAL_MAX_ATOMS` (12) nodes (approx 20% of original size). Edges interconnecting the remaining nodes are preserved.
-- **Output:** Causal PyG objects saved as `.pkl` in `data/qm9/layer3/` (e.g., `qm9_causal_homo_train.pkl`).
-
----
-
-## 8. LAYER 4 — QUANTUM QCGNN
-**Files:** `code/layer4_quantum/quantum_model.py`, `quantum_circuit.py`
-- **Graph Pooling:** Because causal graphs vary in size (3-12 nodes), `global_mean_pool` and `global_max_pool` are concatenated to create a fixed `18-dimensional` classical representation.
-- **Classical Projection:** An `nn.Linear` layer projects the 18-dim vector to an `8-dimensional` vector.
-- **Quantum Encoding:** The 8 values map to `RY(theta)` angle encoding across **8 qubits**.
-- **Quantum Circuit:** `n_rotation_layers = 2`, `n_entangle_layers = 1`. Variational layers utilize parameterized `RY` gates followed by linear `CNOT` entanglement (adjacent qubits).
-- **Measurement:** Pauli-Z expectation values (`<Z_i>`) yield `8 measurements`.
-- **Classical Readout:** A classical MLP (`8 -> 16 -> 3`) translates measurements into predictions.
-
----
-
-## 9. QUANTUM MATHEMATICS
-The circuit initializes in the vacuum state $|0\rangle^{\otimes 8}$. 
-1. **Encoding:** Data is embedded via angle encoding $R_Y(\theta) = e^{-i \theta Y / 2}$.
-2. **Ansatz (Parameterized Circuit):** Trainable rotations $U(\theta)$ explore the Hilbert space.
-3. **Entanglement:** $CNOT$ gates correlate adjacent qubits, allowing the circuit to represent non-linear interactions across the atomic features.
-4. **Measurement:** Expectation values of the Pauli-Z operator $\langle Z_i \rangle$ collapse the quantum state into classical numeric bounds $[-1, 1]$.
-*(All simulations are performed locally via PennyLane's default simulator; no physical quantum hardware is utilized).*
-
----
-
-## 10. HYBRID DIFFERENTIATION
-The PennyLane quantum node (`qnode`) is wrapped using `qml.qnn.TorchLayer`. This seamless interface allows PennyLane's internal differentiation (e.g., parameter-shift rules or backprop) to automatically attach to the PyTorch `autograd` computational graph. The classical optimizer backpropagates the loss continuously through the classical readout, quantum circuit, and classical projection.
-
----
-
-## 11. TRAINING
-**Optimizer:** Adam (`lr = 1e-3`)
-**Loss Function:** Mean Squared Error (MSE) on Z-scored targets.
-**Batch Size:** 32 (Layer 4), 16 (Layer 3)
-**Epochs:** 100
-**Early Stopping:** Patience of 15 epochs based on validation loss.
-*(One epoch represents one complete forward and backward pass over the entire training subset).*
-
----
-
-## 12. CHECKPOINTS
-Located in `models/`:
-- `best_classical_gnn.pt`: Experiment A (Full + Classical)
-- `best_causal_classical_gnn.pt`: Experiment B (Causal + Classical)
-- `best_qcgnn.pt`: Experiment C (Causal + Quantum)
-- `best_full_qcgnn.pt`: Experiment D (Full + Quantum)
-
----
-
-## 13. EXPERIMENTS
-The project forms a 2x2 experimental matrix isolating the effects of Graph Representation vs. Model Architecture:
-
-|             | CLASSICAL MODEL | QUANTUM MODEL |
-|-------------|-----------------|---------------|
-| **FULL GRAPH** | Experiment A    | Experiment D  |
-| **CAUSAL GRAPH**| Experiment B    | Experiment C  |
-
----
-
-## 14. EXPERIMENT A (Full Graph + Classical GENConv)
-- **Setup:** The raw, 18-atom molecules passed through a state-of-the-art classical 3-layer `GENConv` network.
-- **Results:** Serves as the primary classical baseline. Showed high performance (HOMO MAE: 0.212 eV), demonstrating standard deep learning capability on dense data.
-
-## 15. EXPERIMENT B (Causal Graph + Classical GENConv)
-- **Setup:** Classical `GENConv` network forced to learn from the 3-12 atom reduced causal subgraphs.
-- **Results:** Performance dropped (HOMO MAE: 0.368 eV), showing that standard classical convolution heavily relies on the contextual "noise" of the full graph.
-
-## 16. EXPERIMENT C (Causal Graph + QCGNN)
-- **Setup:** The proposed novel hybrid architecture.
-- **Results:** Achieved HOMO MAE: 0.408 eV. While not surpassing the full classical baseline, it successfully modeled chemical properties using significantly fewer parameters and restricted subgraph data.
-
-## 17. EXPERIMENT D (Full Graph + QCGNN)
-- **Setup:** The 8-qubit QCGNN exposed directly to the noisy 18-atom full graph.
-- **Results:** Achieved HOMO MAE: 0.384 eV. 
-
----
-
-## 18. RESULTS — COMPLETE COMPARISON MATRIX
-*All metrics extracted from actual `results/*_test_metrics.json`, evaluated on the independent test set. MAE and RMSE are in physical units (eV). R² is dimensionless (higher is better).*
-
-### 18.1 Full Results Table
-
-| Experiment | Graph | Model | HOMO MAE (eV) | HOMO RMSE (eV) | HOMO R² | LUMO MAE (eV) | LUMO RMSE (eV) | LUMO R² | GAP MAE (eV) | GAP RMSE (eV) | GAP R² |
-|------------|-------|-------|---------------|----------------|---------|---------------|----------------|---------|-------------|----------------|--------|
-| Exp A | Full | Classical GENConv | 0.2122 | 0.2969 | 0.7593 | 0.3068 | 0.4467 | 0.8818 | 0.3501 | 0.4978 | 0.8563 |
-| Exp B | Causal | Classical GENConv | 0.3675 | 0.4953 | 0.3303 | 0.7018 | 0.8848 | 0.5363 | 0.7191 | 0.9145 | 0.5152 |
-| Exp C | Causal | Hybrid QCGNN | 0.4078 | 0.5446 | 0.1902 | 0.7709 | 0.9504 | 0.4649 | 0.8143 | 1.0119 | 0.4064 |
-| Exp D | Full | Hybrid QCGNN | 0.3836 | 0.5216 | 0.2572 | 0.7471 | 0.9299 | 0.4878 | 0.7847 | 0.9778 | 0.4458 |
-
-### 18.2 HOMO — 2×2 Comparison Matrix
-
-**MAE (eV) ↓ Lower is better**
-
-|                    | Classical GENConv | Hybrid QCGNN |
-|--------------------|-------------------|--------------|
-| **Full Graph**     | **0.2122** (Exp A) | 0.3836 (Exp D) |
-| **Causal Graph**   | 0.3675 (Exp B)     | 0.4078 (Exp C) |
-
-**RMSE (eV) ↓ Lower is better**
-
-|                    | Classical GENConv | Hybrid QCGNN |
-|--------------------|-------------------|--------------|
-| **Full Graph**     | **0.2969** (Exp A) | 0.5216 (Exp D) |
-| **Causal Graph**   | 0.4953 (Exp B)     | 0.5446 (Exp C) |
-
-**R² ↑ Higher is better**
-
-|                    | Classical GENConv | Hybrid QCGNN |
-|--------------------|-------------------|--------------|
-| **Full Graph**     | **0.7593** (Exp A) | 0.2572 (Exp D) |
-| **Causal Graph**   | 0.3303 (Exp B)     | 0.1902 (Exp C) |
-
-### 18.3 LUMO — 2×2 Comparison Matrix
-
-**MAE (eV) ↓ Lower is better**
-
-|                    | Classical GENConv | Hybrid QCGNN |
-|--------------------|-------------------|--------------|
-| **Full Graph**     | **0.3068** (Exp A) | 0.7471 (Exp D) |
-| **Causal Graph**   | 0.7018 (Exp B)     | 0.7709 (Exp C) |
-
-**RMSE (eV) ↓ Lower is better**
-
-|                    | Classical GENConv | Hybrid QCGNN |
-|--------------------|-------------------|--------------|
-| **Full Graph**     | **0.4467** (Exp A) | 0.9299 (Exp D) |
-| **Causal Graph**   | 0.8848 (Exp B)     | 0.9504 (Exp C) |
-
-**R² ↑ Higher is better**
-
-|                    | Classical GENConv | Hybrid QCGNN |
-|--------------------|-------------------|--------------|
-| **Full Graph**     | **0.8818** (Exp A) | 0.4878 (Exp D) |
-| **Causal Graph**   | 0.5363 (Exp B)     | 0.4649 (Exp C) |
-
-### 18.4 GAP — 2×2 Comparison Matrix
-
-**MAE (eV) ↓ Lower is better**
-
-|                    | Classical GENConv | Hybrid QCGNN |
-|--------------------|-------------------|--------------|
-| **Full Graph**     | **0.3501** (Exp A) | 0.7847 (Exp D) |
-| **Causal Graph**   | 0.7191 (Exp B)     | 0.8143 (Exp C) |
-
-**RMSE (eV) ↓ Lower is better**
-
-|                    | Classical GENConv | Hybrid QCGNN |
-|--------------------|-------------------|--------------|
-| **Full Graph**     | **0.4978** (Exp A) | 0.9778 (Exp D) |
-| **Causal Graph**   | 0.9145 (Exp B)     | 1.0119 (Exp C) |
-
-**R² ↑ Higher is better**
-
-|                    | Classical GENConv | Hybrid QCGNN |
-|--------------------|-------------------|--------------|
-| **Full Graph**     | **0.8563** (Exp A) | 0.4458 (Exp D) |
-| **Causal Graph**   | 0.5152 (Exp B)     | 0.4064 (Exp C) |
-
-
----
-
-## 19. VISUALIZATIONS
-Automated plotting is handled by `code/visualization/visualize_results.py`. 
-- **Stored in:** `results/visualizations/`
-- **Generates:** Training loss curves, comparative bar charts (MAE/RMSE/R²), model comparison CSVs, and isolated metric tracking for all 4 experiments.
-
----
-
-## 20. INSTALLATION
-**Core Dependencies:**
-- Python 3.x
-- PyTorch
-- PyTorch Geometric (PyG)
-- PennyLane
-- Flask (for demo frontend)
-- Matplotlib / Pandas / NumPy
-
----
-
-## 21. ENVIRONMENT SETUP
-*(Assuming Windows PowerShell environment)*
 ```powershell
 python -m venv venv
-.\venv\Scripts\activate
-pip install torch torchvision torchaudio
-pip install torch_geometric
-pip install pennylane flask pandas matplotlib
+.\venv\Scripts\Activate.ps1
+
+# Install a PyTorch build that matches your platform/CUDA, then:
+pip install torch_geometric pennylane rdkit flask pandas matplotlib scikit-learn numpy
+```
+
+For IBM hardware workers, this project also uses a separate environment such as `qpu_execution_venv` (see reports under [`reports/`](reports/)). Set:
+
+```powershell
+$env:IBM_QUANTUM_API_KEY = "..."
+$env:IBM_QUANTUM_INSTANCE = "crn:..."
+```
+
+Never commit API keys.
+
+**Unit tests (no live QPU required for the mocked suite):**
+
+```powershell
+python -m unittest tests.test_molecule_pipeline tests.test_ibm_qpu_worker tests.test_dashboard_visual_data
 ```
 
 ---
 
-## 22. RUNNING THE PROJECT
-**Data Preprocessing (Layers 1 & 2):**
+## 12. Dataset preparation
+
+1. Download QM9 XYZ files and place them in `data/qm9/raw/`.
+2. Adjust `MAX_SAMPLES` in [`config.py`](config.py) if needed (`25000` default; `None` for full set).
+3. Run:
+
 ```powershell
-python qcgnn_preprocessing.py
+python layer1_preprocessing.py
+python layer2_XYZextraction.py
+python layer3_causal.py --fresh --train-only --epochs 100
 ```
-**Causal Extraction (Layer 3):**
+
+Useful Layer 3 variants (from the script docstring):
+
 ```powershell
-python layer3_causal.py
+python layer3_causal.py --eval-only 100 --target 0
+python layer3_causal.py --all-targets
 ```
-**Model Training / Evaluation:**
+
+Experiments B and C expect HOMO subgraph pickles such as `data/qm9/layer3/qm9_causal_homo_train.pkl` (with fallback to unsuffixed `qm9_causal_*.pkl` in the trainers).
+
+---
+
+## 13. Training
+
+Run from the **repository root** so `config.py` and package imports resolve (trainers also adjust `sys.path`).
+
 ```powershell
-# Experiment A
+# Experiment A — full graph, classical GENConv
 python code/baselines/classical_gnn/classical_gnn_train.py
-python code/baselines/classical_gnn/classical_gnn_evaluate.py
 
-# Experiment B
+# Experiment B — attribution subgraph, classical GENConv
 python code/baselines/causal_classical_gnn/causal_classical_gnn_train.py
-python code/baselines/causal_classical_gnn/causal_classical_gnn_evaluate.py
 
-# Experiment C
+# Experiment C — attribution subgraph, hybrid QCGNN
 python code/layer4_quantum/quantum_train.py
-python code/layer4_quantum/quantum_evaluate.py
 
-# Experiment D
+# Experiment D — full graph, hybrid QCGNN
 python code/experiments/experiment_D_full_qcgnn/full_qcgnn_train.py
+```
+
+Optional epoch override (supported by the train scripts’ `--epochs` flag):
+
+```powershell
+python code/baselines/classical_gnn/classical_gnn_train.py --epochs 100
+```
+
+Histories are written under `results/` (e.g. `classical_gnn_training_history.json`, `quantum_training_history_corrected.json`).
+
+---
+
+## 14. Evaluation
+
+```powershell
+python code/baselines/classical_gnn/classical_gnn_evaluate.py
+python code/baselines/causal_classical_gnn/causal_classical_gnn_evaluate.py
+python code/layer4_quantum/quantum_evaluate.py
 python code/experiments/experiment_D_full_qcgnn/full_qcgnn_evaluate.py
 ```
-**Run Visualizations:**
+
+Metrics JSON files land in `results/`. Experiment C evaluation loads `models/best_qcgnn_corrected.pt` and refuses to run without `norm_stats.pkl`.
+
+Regenerate comparison plots:
+
 ```powershell
 python code/visualization/visualize_results.py
 ```
-**Run Frontend Demo Application:**
+
+---
+
+## 15. IBM Quantum hardware
+
+**What is implemented**
+
+- Qiskit circuit rebuild, transpile, Sampler submission: [`code/layer4_quantum/ibm_hardware_adapter.py`](code/layer4_quantum/ibm_hardware_adapter.py), [`ibm_qpu_worker.py`](code/layer4_quantum/ibm_qpu_worker.py)
+- Guarded CLI first-run helper: [`ibm_qpu_first_run.py`](code/layer4_quantum/ibm_qpu_first_run.py)
+- Dashboard submit/poll routes in [`qcg_nn_app.py`](qcg_nn_app.py) (requires explicit `confirmation='SUBMIT'`)
+
+**Preflight (no submit):**
+
+```powershell
+python code/layer4_quantum/ibm_qpu_first_run.py ibm_fez
+```
+
+**Submit one guarded job (incurs queue/cost):**
+
+```powershell
+python code/layer4_quantum/ibm_qpu_first_run.py ibm_fez --shots 128 --submit
+```
+
+**Verified pilot evidence in this repo (not a full test-set study)**
+
+| Evidence | Detail |
+|----------|--------|
+| First recorded job | `results/quantum_ibm_first_run_ibm_fez_20261024T102433Z.json` — backend `ibm_fez`, job `dbe8elfpc3tc739l92lg`, **128 shots**, single circuit |
+| Worker job registry | `results/quantum_ibm_worker_jobs.json` — **10** job IDs on `ibm_fez`, **1024 shots** each (layout metadata; one circuit per job) |
+| Timestamped result copies | `results/quantum_ibm_20261025T*.json` (includes re-polls and some diagnostic stubs) |
+| Full 2 500-molecule hardware MAE | **Not present** |
+
+Local simulator / equivalence reports (no QPU accuracy claim): [`reports/`](reports/).
+
+---
+
+## 16. Experimental results
+
+### 16.1 Test-set MAE / RMSE / R² (saved single-run JSON)
+
+Values below are copied from files under [`results/`](results/). They are **single-run** aggregates. Metric files do **not** store molecule count, seed, or checkpoint hash. Multi-seed mean ± std is **not available**.
+
+| Exp | Graph | Model | HOMO MAE | HOMO RMSE | HOMO R² | LUMO MAE | LUMO RMSE | LUMO R² | GAP MAE | GAP RMSE | GAP R² | Source |
+|-----|-------|-------|----------|-----------|---------|----------|-----------|---------|---------|----------|--------|--------|
+| A | Full | GENConv | 0.2122 | 0.2969 | 0.7593 | 0.3068 | 0.4467 | 0.8818 | 0.3501 | 0.4978 | 0.8563 | [`classical_gnn_test_metrics.json`](results/classical_gnn_test_metrics.json) |
+| B | Attr. subgraph | GENConv | 0.3675 | 0.4953 | 0.3303 | 0.7018 | 0.8848 | 0.5363 | 0.7191 | 0.9145 | 0.5152 | [`causal_classical_gnn_test_metrics.json`](results/causal_classical_gnn_test_metrics.json) |
+| C | Attr. subgraph | Hybrid | 0.4039 | 0.5400 | 0.2038 | 0.7661 | 0.9427 | 0.4736 | 0.8057 | 0.9983 | 0.4223 | [`quantum_test_metrics.json`](results/quantum_test_metrics.json) *(current evaluator output)* |
+| C† | Attr. subgraph | Hybrid | 0.4078 | 0.5446 | 0.1902 | 0.7709 | 0.9504 | 0.4649 | 0.8143 | 1.0119 | 0.4064 | [`quantum_test_metrics_before_corrected.json`](results/quantum_test_metrics_before_corrected.json); also [`model_comparison.csv`](results/visualizations/model_comparison.csv) |
+| D | Full | Hybrid | 0.3836 | 0.5216 | 0.2572 | 0.7471 | 0.9299 | 0.4878 | 0.7847 | 0.9778 | 0.4458 | [`full_qcgnn_test_metrics.json`](results/full_qcgnn_test_metrics.json) |
+
+† Archived / pre-correction Experiment C numbers still appear in some plots and CSV exports. Prefer documenting **which** C file you cite.
+
+**HOMO MAE 2×2 (using current C where noted)**
+
+| | Classical GENConv | Hybrid QCGNN |
+|--|-------------------|--------------|
+| Full graph | **0.2122** (A) | 0.3836 (D) |
+| Attr. subgraph | 0.3675 (B) | 0.4039 (C current) / 0.4078 (C archived) |
+
+On these saved runs, full-graph classical GENConv has the lowest absolute error. Attribution pruning increases classical HOMO MAE substantially (~0.212 → ~0.368). The hybrid moves less under the same prune but remains worse than both classical settings. This is **not** evidence of quantum advantage.
+
+### 16.2 Training curves (normalized MSE; 100 epochs)
+
+| Exp | History file | Final train loss | Best val loss (1-based epoch) |
+|-----|--------------|------------------|-------------------------------|
+| A | [`classical_gnn_training_history.json`](results/classical_gnn_training_history.json) | 0.1123 | 0.1680 @ 80 |
+| B | [`causal_classical_gnn_training_history.json`](results/causal_classical_gnn_training_history.json) | 0.4549 | 0.5607 @ 56 |
+| C | [`quantum_training_history_corrected.json`](results/quantum_training_history_corrected.json) | 0.6358 | 0.6521 @ 94 |
+| C (older) | [`quantum_training_history.json`](results/quantum_training_history.json) | 0.6439 | 0.6658 @ 91 |
+| D | [`full_qcgnn_training_history.json`](results/full_qcgnn_training_history.json) | 0.6297 | 0.6620 @ 82 |
+
+### 16.3 Multi-seed statistics
+
+| Item | Status |
+|------|--------|
+| mean ± std over seeds | **Not available** (global seed `42` only) |
+
+### 16.4 IBM hardware
+
+| Item | Status |
+|------|--------|
+| Pilot single-circuit jobs on `ibm_fez` | Present (see §15) |
+| Hardware MAE/RMSE on full test set | **Not available** |
+
+---
+
+## 17. Visualizations
+
+Existing plots (regenerate with `visualize_results.py`; some figures may still show archived Experiment C numbers):
+
+| Description | Path |
+|-------------|------|
+| MAE comparison | [`results/visualizations/metrics/mae_comparison.png`](results/visualizations/metrics/mae_comparison.png) |
+| RMSE / R² comparison | [`results/visualizations/metrics/rmse_comparison.png`](results/visualizations/metrics/rmse_comparison.png), [`r2_comparison.png`](results/visualizations/metrics/r2_comparison.png) |
+| Classical vs hybrid overview | [`results/visualizations/comparison/qcgnn_vs_classical.png`](results/visualizations/comparison/qcgnn_vs_classical.png) |
+| Exp A loss | [`results/visualizations/experiment_A_full_classical_gnn/training_curves/classical_gnn_loss_curve.png`](results/visualizations/experiment_A_full_classical_gnn/training_curves/classical_gnn_loss_curve.png) |
+| Exp B vs C MAE | [`results/visualizations/experiment_B_causal_classical_gnn/comparison/causal_classical_gnn_vs_qcgnn_mae.png`](results/visualizations/experiment_B_causal_classical_gnn/comparison/causal_classical_gnn_vs_qcgnn_mae.png) |
+| Exp C loss | [`results/visualizations/experiment_C_causal_qcgnn/training_curves/qcgnn_loss_curve.png`](results/visualizations/experiment_C_causal_qcgnn/training_curves/qcgnn_loss_curve.png) |
+| Exp D vs A MAE | [`results/visualizations/experiment_D_full_qcgnn/comparison/full_qcgnn_vs_classical_full_graph_mae.png`](results/visualizations/experiment_D_full_qcgnn/comparison/full_qcgnn_vs_classical_full_graph_mae.png) |
+| Tabular export | [`results/visualizations/model_comparison.csv`](results/visualizations/model_comparison.csv) |
+
+---
+
+## 18. Demo application
+
 ```powershell
 python qcg_nn_app.py
 ```
 
----
+Serves `http://127.0.0.1:5000` (see [`qcg_nn_app.py`](qcg_nn_app.py)).
 
-## 23. FRONTEND / DEMO
-**File:** `qcg_nn_app.py`
-A single-file Flask application that provides a professional web dashboard.
-- Features a QM9 molecule dropdown (utilizing the test set).
-- Renders an interactive D3.js SVG molecular graph.
-- Highlights the causal subgraph dynamically.
-- Renders the 8-qubit quantum circuit and animates Pauli-Z measurements.
-- Outputs real-time model predictions (HOMO, LUMO, GAP in eV) using the `best_qcgnn.pt` checkpoint.
+**Implemented**
 
-**Arbitrary SMILES Support:**
-The frontend now supports inference on arbitrary SMILES strings via an integrated RDKit 3D conformer generation adapter (`code/inference/molecule_inference.py`). It embeds SMILES into exactly the same 9-dimensional node / 4-dimensional edge PyG structure expected by the model.
+- SMILES input via RDKit adapter [`code/inference/molecule_inference.py`](code/inference/molecule_inference.py)
+- Prediction-gradient attribution subgraph highlighting (inline SVG)
+- Local PennyLane predictions using `models/best_qcgnn_corrected.pt`
+- Optional IBM submit/status API (credentials + explicit confirmation)
 
----
+**Not implemented as previously described in older docs**
 
-## 24. INFERENCE-TIME CAUSAL ATTRIBUTION
-The original training-time Layer 3 causal extractor (`qcgnn_causal_extractor.py`) utilized a Mean Squared Error gradient computation against the **ground-truth target** (`data.y`).
-
-Because arbitrary molecules entered at inference time (e.g. via SMILES) do not possess a ground-truth label, running the training-time extractor would require fabricating labels. 
-
-To preserve scientific integrity without sacrificing interpretability, inference uses **Prediction-Gradient Atom Attribution** (`code/inference/causal_attribution_inference.py`):
-1. **Mathematical Formulation:** The full input graph $X$ is passed through the trained QCGNN checkpoint $f_\theta(X)$. We sum the absolute gradients of the scalar prediction magnitude $P$ with respect to the input node features:
-$S_i = \sum_{j=1}^9 \left| \frac{\partial P}{\partial X_{ij}} \right|$
-2. **Ranking:** Atoms are ranked by $S_i$. 
-3. **Subgraph Construction:** The top $N_c$ topologically important atoms (matching the 20% pruning fraction from training) are retained to form the inference-time attribution subgraph.
-4. **Final Inference:** This subgraph is passed back to the QCGNN to generate final properties.
-
-*This isolates training-time selection from inference-time topological interpretation, ensuring no fake data is generated.*
+- QM9 test-set dropdown browser
+- D3.js graph library (custom SVG is used)
+- Animated 8-qubit circuit visualization beyond measurement bars
 
 ---
 
-## 25. CURRENT LIMITATIONS
-- **Simulation:** Results rely on local, noise-free state-vector simulation via PennyLane, which does not account for physical quantum hardware noise (e.g., decoherence or gate errors).
-- **Causality vs. Attribution:** The word "causal" in this repository refers to gradient-based attribution heuristics, which identifies structural correlations critical to the neural network rather than proving fundamental physical causality.
+## 19. Limitations
+
+1. **No quantum advantage.** Classical full-graph GENConv has lower saved MAE than hybrid variants.
+2. **Attribution ≠ causality.** IG/prediction gradients select atoms important to a model, not physically identified causes.
+3. **Hybrid is not a message-passing GNN.** Edges are unused in the PQC path; capacity is far smaller than GENConv.
+4. **HOMO subgraphs for all targets.** Trainers load HOMO-selected graphs while predicting HOMO, LUMO, and gap.
+5. **Simulator ≠ hardware.** Main tables are noise-free PennyLane expectations.
+6. **Hardware scale.** Only pilot circuits are logged; not a 2 500-molecule QPU evaluation.
+7. **Single seed; conflicting Exp C files.** Statistical uncertainty is unreported; cite the metric file you use.
+8. **Reproducibility gaps.** `data/` and `models/` may be missing; cuDNN deterministic mode is off in `config.py`; README commands previously named nonexistent preprocessing scripts (corrected here).
+9. **Possible edge-feature alignment issue** between Layer 1 bond lists and Layer 2 `edge_attr` duplication — relevant to GENConv, not to the hybrid forward path. See the research readiness doc.
 
 ---
 
-## 25. RESEARCH INTEGRITY: SCIENTIFIC INTERPRETATION
-- **Predictions vs. Experiments:** Values output by this repository are computational model predictions, not experimental laboratory measurements.
-- **Hardware Limitations:** Simulator results are not equivalent to quantum hardware results.
-- **Quantum Advantage:** This project explores hybrid architectures but **does not** claim physical quantum advantage over classical models, as classical GENConv currently achieves lower error margins.
+## 20. Reproducibility
+
+| Control | Setting |
+|---------|---------|
+| Global seed | `RANDOM_SEED = 42` in [`config.py`](config.py) (`torch` / `numpy`; CUDA seed if available) |
+| Split | Deterministic given seed and `MAX_SAMPLES` |
+| cuDNN | `deterministic=False`, `benchmark=True` (bit-exact GPU reruns not guaranteed) |
+| Checkpoints | Best validation MSE during the run |
+| Norm stats | `data/qm9/layer2/norm_stats.pkl` required for honest eV metrics |
+
+To reproduce evaluation you need: matching pickles, the listed checkpoints, and the same code revision that wrote the JSON files.
 
 ---
 
-## 26. FUTURE WORK
-1. **Multi-property prediction:** Expanding targets to include Dipole Moment, Isotropic Polarizability, and Heat Capacity (Cv).
-2. **Arbitrary SMILES support:** Creating a validated RDKit 3D conformer generation adapter.
-3. **Hardware Execution:** Deploying the trained circuit to IBM Quantum hardware.
-4. **Qubit Ablations:** Analyzing model stability across 4 vs. 8 vs. 12 qubit projections.
+## 21. Future work
+
+- Multi-seed reporting and attribution vs random/degree ablations  
+- Classical bottleneck control (same 18→8 projection without a PQC)  
+- Target-specific subgraphs for LUMO/GAP  
+- Optional geometric classical baselines under a fixed subset/split  
+- Qubit / depth ablations (4 / 8 / 12)  
+- Noise-aware simulation and a **budgeted** hardware pilot with calibration snapshots  
+- Additional QM9 targets (μ, α, Cv) if scientifically justified  
+- Environment lockfile suitable for clean installs  
 
 ---
 
-## 27. REPRODUCIBILITY
-The project features a highly reproducible environment governed by `config.py`. A global random seed ensures deterministic splitting of the 133k QM9 dataset. Checkpoint saving limits variance, and test-set evaluations use denormalization math identical across all scripts. 
+## 22. Contributions and novelty
+
+**What this repository currently provides**
+
+- An end-to-end software pipeline from XYZ → graphs → attribution subgraphs → classical and hybrid regressors  
+- A 2×2 experimental comparison with saved simulator metrics  
+- An inference-only IBM Runtime pathway and local circuit-validation reports  
+- A SMILES demo for interactive inspection  
+
+**What should not be claimed without further evidence**
+
+- Novel causal discovery of molecular mechanisms  
+- Quantum advantage or supremacy  
+- State-of-the-art QM9 accuracy  
+- Completed large-scale hardware benchmarking  
+
+Related literature (QM9, MPNNs, GENConv, Integrated Gradients, hybrid QGNNs) is surveyed in [`docs/research_readiness_and_publication_roadmap.md`](docs/research_readiness_and_publication_roadmap.md).
 
 ---
 
-## 28. COMPLETE PROJECT TREE
-```text
-qcgnn_project/
-├── code/
-│   ├── baselines/
-│   │   ├── causal_classical_gnn/
-│   │   └── classical_gnn/
-│   ├── experiments/
-│   │   └── experiment_D_full_qcgnn/
-│   ├── layer3_qcgnn_model/
-│   │   └── qcgnn_causal_extractor.py
-│   ├── layer4_quantum/
-│   │   ├── quantum_circuit.py
-│   │   ├── quantum_model.py
-│   │   ├── quantum_train.py
-│   │   └── quantum_evaluate.py
-│   └── visualization/
-│       └── visualize_results.py
-├── data/
-│   └── qm9/
-│       ├── raw/
-│       ├── layer2/
-│       └── layer3/
-├── models/
-│   ├── best_causal_classical_gnn.pt
-│   ├── best_classical_gnn.pt
-│   ├── best_full_qcgnn.pt
-│   └── best_qcgnn.pt
-├── results/
-│   ├── visualizations/
-│   └── *metrics.json
-├── config.py
-├── layer3_causal.py
-├── qcgnn_preprocessing.py
-├── qm9_preprocess_dataset.py
-└── qcg_nn_app.py
+## 23. Citation
+
+No formal CITATION.cff or paper BibTeX is packaged yet. If you use this codebase, please link the repository and cite QM9:
+
+```bibtex
+@article{ramakrishnan2014qm9,
+  title={Quantum chemistry structures and properties of 134 kilo molecules},
+  author={Ramakrishnan, Raghunathan and Dral, Pavlo O and Rupp, Matthias and von Lilienfeld, O Anatole},
+  journal={Scientific Data},
+  volume={1},
+  pages={140022},
+  year={2014}
+}
 ```
 
 ---
 
-## 29. CITATIONS / REFERENCES
-Currently, there is no formal citation information embedded in the repository. (If you use this codebase, please link back to this repository).
+## 24. Acknowledgements
 
-## 30. AUTHOR / PROJECT INFORMATION
-Project contributors: See repository commit history.
+No `LICENSE` file is present in this repository at the time of writing; licensing terms are therefore unspecified here. Do not assume open-source reuse rights until a license is added by the project owners.
+
+QM9 data are due to Ramakrishnan et al. Software stacks include PyTorch, PyTorch Geometric, PennyLane, RDKit, and (optionally) IBM Qiskit Runtime.
+
+---
+
+*README last revised to match the inspected codebase and saved artifacts. Prefer artifact files under `results/` over narrative claims when they disagree.*
